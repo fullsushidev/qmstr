@@ -5,3 +5,6 @@
 [submodule "doc/themes/hugo-theme-techdoc"]
 	path = doc/themes/hugo-theme-techdoc
 	url = https://github.com/thingsym/hugo-theme-techdoc.git
+[submodule "doc/tools/databranches"]
+	path = doc/tools/databranches
+	url = git@github.com:endocode/databranches.git
