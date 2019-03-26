@@ -1,4 +1,4 @@
-baseURL = "https://qmstr.org/documentation"
+baseURL = "https://senaingrid.github.io/test-web/documentation"
 
 languageCode = "en-us"
 DefaultContentLanguage = "en"
@@ -51,7 +51,7 @@ enableMissingTranslationPlaceholders = false
 
 [[menu.main]]
     name = "Main Website"
-    url = "https://qmstr.org"
+    url = "https://senaingrid.github.io/test-web"
     weight = 2
 
 [[menu.main]]
