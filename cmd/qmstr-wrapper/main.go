@@ -68,6 +68,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create wrapper for %s: %v", commandLine, err)
 	}
+	defer w.Exit()
 	w.Wrap()
 
 	fileNodes, err := w.Builder.Analyze(commandLine)

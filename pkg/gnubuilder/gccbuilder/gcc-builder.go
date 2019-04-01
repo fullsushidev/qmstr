@@ -5,16 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
 
-	pb "github.com/QMSTR/qmstr/pkg/service"
 	"github.com/QMSTR/qmstr/pkg/builder"
 	"github.com/QMSTR/qmstr/pkg/common"
 	"github.com/QMSTR/qmstr/pkg/gnubuilder"
+	pb "github.com/QMSTR/qmstr/pkg/service"
 	"github.com/spf13/pflag"
 )
 
@@ -89,7 +90,17 @@ func (g *GccBuilder) GetName() string {
 	}
 }
 
+func (g *GccBuilder) Setup() error {
+	return os.Setenv(common.QMSTRWRAPGCC, "")
+}
+
+func (g *GccBuilder) TearDown() error {
+	// Unset environment variable before we end
+	return os.Unsetenv(common.QMSTRWRAPGCC)
+}
+
 func (g *GccBuilder) Analyze(commandline []string) ([]*pb.FileNode, error) {
+
 	if g.Debug {
 		g.Logger.Printf("Parsing commandline %v", commandline)
 	}
@@ -108,28 +119,40 @@ func (g *GccBuilder) Analyze(commandline []string) ([]*pb.FileNode, error) {
 		}
 		fileNodes := []*pb.FileNode{}
 		linkedTarget := builder.NewFileNode(common.BuildCleanPath(g.WorkDir, g.Output[0], false), pb.FileNode_TARGET)
+		libraries := []*pb.FileNode{}
 		dependencies := []*pb.FileNode{}
 		for _, inFile := range g.Input {
 			inputFileNode := &pb.FileNode{}
 			ext := filepath.Ext(inFile)
 			if ext == ".o" {
 				inputFileNode = builder.NewFileNode(common.BuildCleanPath(g.WorkDir, inFile, false), pb.FileNode_INTERMEDIATE)
+				libraries = append(libraries, inputFileNode)
 			} else if ext == ".c" || ext == ".cc" || ext == ".cpp" || ext == ".c++" || ext == ".cp" || ext == ".cxx" {
 				inputFileNode = builder.NewFileNode(common.BuildCleanPath(g.WorkDir, inFile, false), pb.FileNode_SOURCE)
+				libraries = append(libraries, inputFileNode)
+			} else if strings.HasSuffix(inFile, ".so") {
+				depFileNode := builder.NewFileNode(common.BuildCleanPath(g.WorkDir, inFile, false), pb.FileNode_TARGET)
+				dependencies = append(dependencies, depFileNode)
 			} else {
 				inputFileNode = builder.NewFileNode(common.BuildCleanPath(g.WorkDir, inFile, false), pb.FileNode_TARGET)
+				libraries = append(libraries, inputFileNode)
 			}
-			dependencies = append(dependencies, inputFileNode)
 		}
 		err := gnubuilder.FindActualLibraries(g.Afs, g.ActualLibs, g.LinkLibs, append(g.LibPath, g.SysLibPath...), g.staticLink, g.StaticLibs)
 		if err != nil {
-			g.Logger.Fatalf("Failed to collect dependencies: %v", err)
+			g.Logger.Fatalf("Failed to collect libraries: %v", err)
 		}
 		for _, actualLib := range g.ActualLibs {
-			linkLib := builder.NewFileNode(common.BuildCleanPath(g.WorkDir, actualLib, false), pb.FileNode_TARGET)
-			dependencies = append(dependencies, linkLib)
+			if strings.HasSuffix(actualLib, ".so") {
+				runtimeDep := builder.NewFileNode(common.BuildCleanPath(g.WorkDir, actualLib, false), pb.FileNode_TARGET)
+				dependencies = append(dependencies, runtimeDep)
+			} else {
+				linkLib := builder.NewFileNode(common.BuildCleanPath(g.WorkDir, actualLib, false), pb.FileNode_TARGET)
+				libraries = append(libraries, linkLib)
+			}
 		}
-		linkedTarget.DerivedFrom = dependencies
+		linkedTarget.DerivedFrom = libraries
+		linkedTarget.Dependencies = dependencies
 		fileNodes = append(fileNodes, linkedTarget)
 		return fileNodes, nil
 	case gnubuilder.ModeAssemble:

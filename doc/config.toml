@@ -1,4 +1,4 @@
-baseURL = "https://qmstr.org/documentation"
+baseURL = "https://senaingrid.github.io/test-web/documentation"
 
 languageCode = "en-us"
 DefaultContentLanguage = "en"
@@ -40,6 +40,9 @@ enableMissingTranslationPlaceholders = false
     # path name excluded from documentation menu
     menu_exclusion = ["archives", "blog", "entry", "post", "posts"]
 
+    # additional CSS code for the site:
+    custom_css = ["css/qmstr.css"]
+
 # Global menu section
 [[menu.main]]
     name = "Documentation"
@@ -48,7 +51,7 @@ enableMissingTranslationPlaceholders = false
 
 [[menu.main]]
     name = "Main Website"
-    url = "https://qmstr.org"
+    url = "https://senaingrid.github.io/test-web"
     weight = 2
 
 [[menu.main]]

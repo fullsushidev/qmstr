@@ -10,28 +10,41 @@ import (
 	"github.com/QMSTR/qmstr/pkg/service"
 )
 
-var ErrInvalidNodeIdent = errors.New("Invalid node identifier")
+var ErrEmptyNodeIdent = errors.New("Empty node identifier")
 var ErrInvalidAttribute = errors.New("Invalid attribute")
 var ErrCallByValue = errors.New("you shall not call setFieldValue by value")
 
-func ParseNodeID(nodeid string) (interface{}, error) {
-	nodeIDTokens := strings.Split(nodeid, ":")
-	if len(nodeIDTokens) < 2 {
-		return nil, ErrInvalidNodeIdent
+func TokenizeNodeID(nodeid string) (string, []string, error) {
+	if nodeid == "" {
+		return "", nil, ErrEmptyNodeIdent
 	}
-	switch nodeIDTokens[0] {
+	nodeIDTokens := strings.Split(nodeid, ":")
+	nodetype := nodeIDTokens[0]
+	tokens := []string{}
+	if len(nodeIDTokens) > 1 {
+		tokens = nodeIDTokens[1:]
+	}
+	return nodetype, tokens, nil
+}
+
+func ParseNodeID(nodeid string) (interface{}, error) {
+	nodeType, nodeIDTokens, err := TokenizeNodeID(nodeid)
+	if err != nil {
+		return nil, err
+	}
+	switch nodeType {
 	case "file":
-		return createResult(&service.FileNode{}, "Path", nodeIDTokens[1:])
+		return createResult(&service.FileNode{}, "Path", nodeIDTokens)
 	case "package":
-		return createResult(&service.PackageNode{}, "Name", nodeIDTokens[1:])
+		return createResult(&service.PackageNode{}, "Name", nodeIDTokens)
 	case "project":
-		return nil, fmt.Errorf("%s not yet supported", nodeIDTokens[0])
+		return createResult(&service.ProjectNode{}, "Name", nodeIDTokens)
 	case "info":
-		return nil, fmt.Errorf("%s not yet supported", nodeIDTokens[0])
+		return nil, fmt.Errorf("%s not yet supported", nodeType)
 	case "data":
-		return nil, fmt.Errorf("%s not yet supported", nodeIDTokens[0])
+		return nil, fmt.Errorf("%s not yet supported", nodeType)
 	default:
-		return nil, fmt.Errorf("Unsupported node type %s", nodeIDTokens[0])
+		return nil, fmt.Errorf("Unsupported node type %s", nodeType)
 	}
 }
 
@@ -39,6 +52,10 @@ func createResult(node interface{}, defaultAttribute string, args []string) (int
 	var attr string
 	var value string
 
+	// empty node
+	if len(args) < 1 {
+		return node, nil
+	}
 	// set default attribute
 	if len(args) < 2 {
 		attr = defaultAttribute

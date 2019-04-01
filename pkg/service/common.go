@@ -59,6 +59,9 @@ func (fn *FileNode) Describe(less bool, indent string) string {
 	for _, fnode := range fn.DerivedFrom {
 		describe = append(describe, fnode.Describe(less, indent))
 	}
+	for _, dep := range fn.Dependencies {
+		describe = append(describe, dep.Describe(less, indent))
+	}
 	return strings.Join(describe, "\n")
 }
 
@@ -73,4 +76,16 @@ func (pn *PackageNode) Describe(less bool) string {
 		describe = append(describe, fnode.Describe(less, "\t"))
 	}
 	return strings.Join(describe, "\n")
+}
+
+func (fn *FileNode) IsValid() bool {
+	return fn.Path != ""
+}
+
+func (pn *PackageNode) IsValid() bool {
+	return pn.Name != ""
+}
+
+func (prn *ProjectNode) IsValid() bool {
+	return prn.Name != ""
 }

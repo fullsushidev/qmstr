@@ -31,6 +31,7 @@ type:string @index(hash) .
 name:string @index(hash) .
 dataNodes:uid @reverse .
 data:string @index(hash) .
+projectNodeType:string @index(hash) .
 packageNodeType:string @index(hash) .
 fileNodeType:string @index(hash) .
 infoNodeType:string @index(hash) .
@@ -147,6 +148,8 @@ func (db *DataBase) queueWorker() {
 
 		nodeType := reflect.TypeOf(node)
 		switch nodeType {
+		case reflect.TypeOf((*service.ProjectNode)(nil)):
+			db.insertProjectNode(node.(*service.ProjectNode))
 		case reflect.TypeOf((*service.PackageNode)(nil)):
 			db.insertPkgNode(node.(*service.PackageNode))
 		case reflect.TypeOf((*service.FileNode)(nil)):
@@ -171,6 +174,22 @@ func (db *DataBase) insertFileNode(node *service.FileNode) {
 			// found uid
 			if uid != "" {
 				node.DerivedFrom[idx].Uid = uid
+			}
+		}
+	}
+
+	for idx, dep := range node.Dependencies {
+		if dep.Uid == "" {
+			// missing dep
+			ready = false
+			// look up dep in db
+			uid, err := db.GetFileNodeUid(dep.Hash)
+			if err != nil {
+				panic(err)
+			}
+			// found uid
+			if uid != "" {
+				node.Dependencies[idx].Uid = uid
 			}
 		}
 	}
@@ -224,13 +243,24 @@ func (db *DataBase) insertPkgNode(node *service.PackageNode) {
 
 	// we are ready to insert the node
 	db.insertMutex.Lock()
-	packageNode, err := db.GetPackageNode()
+	packageNode, err := db.GetPackageNodeByName(node.Name)
 	if err == nil {
 		node.Uid = packageNode.Uid
 		node.Targets = append(packageNode.Targets, node.Targets...)
 	}
 
 	_, err = dbInsert(db.client, node)
+	if err != nil {
+		panic(err)
+	}
+	atomic.AddUint64(&db.pending, ^uint64(0))
+	db.insertMutex.Unlock()
+}
+
+func (db *DataBase) insertProjectNode(node *service.ProjectNode) {
+	db.insertMutex.Lock()
+
+	_, err := dbInsert(db.client, node)
 	if err != nil {
 		panic(err)
 	}

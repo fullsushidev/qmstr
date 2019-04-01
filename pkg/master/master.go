@@ -5,14 +5,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"golang.org/x/net/context"
 
@@ -51,6 +49,14 @@ func (s *server) PushFile(ctx context.Context, in *service.PushFileMessage) (*se
 	return s.currentPhase.PushFile(in)
 }
 
+func (s *server) CreatePackage(ctx context.Context, in *service.PackageNode) (*service.BuildResponse, error) {
+	return s.currentPhase.CreatePackage(in)
+}
+
+func (s *server) CreateProject(ctx context.Context, in *service.ProjectNode) (*service.BuildResponse, error) {
+	return s.currentPhase.CreateProject(in)
+}
+
 func (s *server) GetAnalyzerConfig(ctx context.Context, in *service.AnalyzerConfigRequest) (*service.AnalyzerConfigResponse, error) {
 	return s.currentPhase.GetAnalyzerConfig(in)
 }
@@ -80,7 +86,26 @@ func (s *server) GetBOM(ctx context.Context, in *service.BOMRequest) (*service.B
 }
 
 func (s *server) Package(stream service.BuildService_PackageServer) error {
-	return status.Error(codes.Unimplemented, "Package method unimplemented")
+	db, err := s.currentPhase.getDataBase()
+	if err != nil {
+		return err
+	}
+	pkg, err := db.GetPackageNode()
+	if err != nil {
+		return err
+	}
+	for {
+		fl, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("recv fileNode fail: %v", err)
+		}
+		pkg.Targets = append(pkg.Targets, fl)
+	}
+	db.AddPackageNode(pkg)
+	return stream.SendAndClose(&service.BuildResponse{Success: true})
 }
 
 func (s *server) GetPackageNode(ctx context.Context, in *service.PackageRequest) (*service.PackageNode, error) {

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/QMSTR/qmstr/pkg/builder"
 	"github.com/QMSTR/qmstr/pkg/common"
@@ -56,6 +58,11 @@ func (ld *LdBuilder) GetName() string {
 }
 
 func (ld *LdBuilder) Analyze(commandline []string) ([]*service.FileNode, error) {
+	// skip when wrapping gcc
+	if _, gccCalled := os.LookupEnv(common.QMSTRWRAPGCC); gccCalled {
+		return []*service.FileNode{}, nil
+	}
+
 	if err := ld.parseCommandLine(commandline[1:]); err != nil {
 		return nil, fmt.Errorf("Failed to parse commandline: %v", err)
 	}
@@ -75,28 +82,40 @@ func (ld *LdBuilder) Analyze(commandline []string) ([]*service.FileNode, error) 
 	}
 	fileNodes := []*service.FileNode{}
 	linkedTarget := builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, ld.Output[0], false), service.FileNode_TARGET)
+	libraries := []*service.FileNode{}
 	dependencies := []*service.FileNode{}
 	for _, inFile := range ld.Input {
 		inputFileNode := &service.FileNode{}
 		ext := filepath.Ext(inFile)
 		if ext == ".o" {
 			inputFileNode = builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, inFile, false), service.FileNode_INTERMEDIATE)
+			libraries = append(libraries, inputFileNode)
 		} else if ext == ".c" {
 			inputFileNode = builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, inFile, false), service.FileNode_SOURCE)
+			libraries = append(libraries, inputFileNode)
+		} else if strings.HasSuffix(inFile, ".so") {
+			depFileNode := builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, inFile, false), service.FileNode_TARGET)
+			dependencies = append(dependencies, depFileNode)
 		} else {
 			inputFileNode = builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, inFile, false), service.FileNode_TARGET)
+			libraries = append(libraries, inputFileNode)
 		}
-		dependencies = append(dependencies, inputFileNode)
 	}
 	err := gnubuilder.FindActualLibraries(ld.Afs, ld.ActualLibs, ld.LinkLibs, append(ld.LibPath, ld.SysLibsPath...), ld.staticLink, ld.StaticLibs)
 	if err != nil {
-		ld.Logger.Fatalf("Failed to collect dependencies: %v", err)
+		ld.Logger.Fatalf("Failed to collect libraries: %v", err)
 	}
 	for _, actualLib := range ld.ActualLibs {
-		linkLib := builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, actualLib, false), service.FileNode_TARGET)
-		dependencies = append(dependencies, linkLib)
+		if strings.HasSuffix(actualLib, ".so") {
+			runtimeDep := builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, actualLib, false), service.FileNode_TARGET)
+			dependencies = append(dependencies, runtimeDep)
+		} else {
+			linkLib := builder.NewFileNode(common.BuildCleanPath(ld.WorkDir, actualLib, false), service.FileNode_TARGET)
+			libraries = append(libraries, linkLib)
+		}
 	}
-	linkedTarget.DerivedFrom = dependencies
+	linkedTarget.DerivedFrom = libraries
+	linkedTarget.Dependencies = dependencies
 	fileNodes = append(fileNodes, linkedTarget)
 	return fileNodes, nil
 }
